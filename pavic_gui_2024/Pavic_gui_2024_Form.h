@@ -1,9 +1,13 @@
 #pragma once
 
 
+#include <thread> // Inclua esta linha para usar std::thread
+#include <algorithm> // Inclua esta linha para usar std::min
 
 namespace pavicgui2024 {
 //#include "include/Diagnostic.h"
+
+
 
 
 
@@ -13,7 +17,119 @@ namespace pavicgui2024 {
 	using namespace System::Windows::Forms;
 	using namespace System::Data;
 	using namespace System::Drawing;
+	using namespace System::Drawing::Imaging; // <-- Adicione esta linha para BitmapData, ImageLockMode, PixelFormat
+
 	using namespace std; // Assuming Diagnostics is in the std namespace
+
+	//================================================================================
+	// // --- Início da função auxiliar para aplicar o filtro sépia parcialmente ---
+	//// Esta função será executada pelas threads.
+	//// Ela precisa ser definida fora da classe do formulário para ser usada com std::thread de forma mais simples.
+	void ApplySepiaFilterPartial(Bitmap^ inputImage, Bitmap^ outputImage, int startY, int endY) {
+		for (int i = 0; i < inputImage->Width; i++) {
+			for (int j = startY; j < endY; j++) {
+				// Passo 1: Obter a cor do pixel atual
+				Color pixelColor = inputImage->GetPixel(i, j);
+
+				// Passo 2: Extrair os valores originais de Vermelho, Verde e Azul
+				int r = pixelColor.R;
+				int g = pixelColor.G;
+				int b = pixelColor.B;
+
+				// Passo 3: Calcular os novos valores de pixel usando a Fórmula Sépia
+				double tr = 0.393 * r + 0.769 * g + 0.189 * b;
+				double tg = 0.349 * r + 0.686 * g + 0.168 * b;
+				double tb = 0.272 * r + 0.534 * g + 0.131 * b;
+
+				// Passo 4: Limitar os valores ao intervalo 0-255
+				int newR = Math::Min(255, (int)tr);
+				int newG = Math::Min(255, (int)tg);
+				int newB = Math::Min(255, (int)tb);
+
+				outputImage->SetPixel(i, j, Color::FromArgb(newR, newG, newB));
+			}
+		}
+	}
+	// --- Fim da função auxiliar ---
+	// 
+	// ==================================================================================
+	//================================================================================
+	// // --- Início da função auxiliar para aplicar o filtro sépia parcialmente ---
+	//// Esta função será executada pelas threads.
+	//// Ela precisa ser definida fora da classe do formulário para ser usada com std::thread de forma mais simples.
+	void ApplySepiaFilterWindow(Bitmap^ inputImage, Bitmap^ outputImage, int startX, int endX, int startY, int endY) {
+		for (int i = startX; i < endX; i++) {
+			for (int j = startY; j < endY; j++) {
+				// Passo 1: Obter a cor do pixel atual
+				Color pixelColor = inputImage->GetPixel(i, j);
+
+				// Passo 2: Extrair os valores originais de Vermelho, Verde e Azul
+				int r = pixelColor.R;
+				int g = pixelColor.G;
+				int b = pixelColor.B;
+
+				// Passo 3: Calcular os novos valores de pixel usando a Fórmula Sépia
+				double tr = 0.393 * r + 0.769 * g + 0.189 * b;
+				double tg = 0.349 * r + 0.686 * g + 0.168 * b;
+				double tb = 0.272 * r + 0.534 * g + 0.131 * b;
+
+				// Passo 4: Limitar os valores ao intervalo 0-255
+				int newR = Math::Min(255, (int)tr);
+				int newG = Math::Min(255, (int)tg);
+				int newB = Math::Min(255, (int)tb);
+
+				outputImage->SetPixel(i, j, Color::FromArgb(newR, newG, newB));
+			}
+		}
+	}
+	// --- Fim da função auxiliar ---
+	// 
+	// 
+	//================================================================================
+	//================================================================================
+	// --- Início da função auxiliar para aplicar o filtro sépia parcialmente ---
+	// Esta função será executada pelas threads e operará em dados brutos.
+	// Ela precisa ser definida fora da classe do formulário.
+	void ApplySepiaFilterPartialRaw(IntPtr inputScan0, int inputStride, IntPtr outputScan0, int outputStride, int width, int bytesPerPixel, int startY, int endY) {
+		// Converter IntPtr para ponteiros de bytes não gerenciados
+		unsigned char* ptrInput = (unsigned char*)inputScan0.ToPointer();
+		unsigned char* ptrOutput = (unsigned char*)outputScan0.ToPointer();
+
+		for (int j = startY; j < endY; j++) {
+			for (int i = 0; i < width; i++) {
+				// Calcular o offset para o pixel atual na linha
+				long offsetInput = (long)j * inputStride + (long)i * bytesPerPixel;
+				long offsetOutput = (long)j * outputStride + (long)i * bytesPerPixel;
+
+				// Obter os valores de cor (assumindo formato BGR ou BGRA)
+				int b = ptrInput[offsetInput];
+				int g = ptrInput[offsetInput + 1];
+				int r = ptrInput[offsetInput + 2];
+				// Se for 32bpp (BGRA), o quarto byte é o canal alfa.
+				// int a = (bytesPerPixel == 4) ? ptrInput[offsetInput + 3] : 255; // Linha comentada por enquanto, se precisar de alfa, descomente e ajuste
+
+				// Aplicar a fórmula Sépia
+				double tr = 0.393 * r + 0.769 * g + 0.189 * b;
+				double tg = 0.349 * r + 0.686 * g + 0.168 * b;
+				double tb = 0.272 * r + 0.534 * g + 0.131 * b;
+
+				// Limitar os valores ao intervalo 0-255
+				int newR = Math::Min(255, (int)tr);
+				int newG = Math::Min(255, (int)tg);
+				int newB = Math::Min(255, (int)tb);
+
+				// Definir os novos valores de pixel na imagem de saída
+				ptrOutput[offsetOutput] = (unsigned char)newB;
+				ptrOutput[offsetOutput + 1] = (unsigned char)newG;
+				ptrOutput[offsetOutput + 2] = (unsigned char)newR;
+				// Se for 32bpp (BGRA), manter o canal alfa original ou definir como 255
+				// if (bytesPerPixel == 4) ptrOutput[offsetOutput + 3] = (unsigned char)a; // Linha comentada por enquanto, se precisar de alfa, descomente e ajuste
+			}
+		}
+	}
+	// --- Fim da função auxiliar ---
+	//==============================================================
+
 
 	/// <summary>
 	/// Summary for Pavic_gui_2024_Form
@@ -28,6 +144,8 @@ namespace pavicgui2024 {
 			//TODO: Add the constructor code here
 			//
 		}
+
+
 
 	protected:
 		/// <summary>
@@ -60,6 +178,18 @@ namespace pavicgui2024 {
 	private: System::Diagnostics::Stopwatch^ filterStopwatch;
 	private: System::Windows::Forms::Button^ bt_filter_Sepia;
 	private: System::Windows::Forms::Button^ bt_filter_Sepia_MultiThread;
+	private: System::Windows::Forms::Button^ bt_filter_Sepia_top;
+	private: System::Windows::Forms::Button^ bt_filter_Sepia_botton;
+
+
+	private: System::Windows::Forms::Label^ lb_timer;
+	private: System::Windows::Forms::TextBox^ textB_Time;
+	private: System::Windows::Forms::Button^ button1;
+	private: System::Windows::Forms::Button^ bt_filter_Sepia_left;
+	private: System::Windows::Forms::Button^ bt_filter_Sepia_Thread;
+
+
+
 
 
 	private:
@@ -89,6 +219,13 @@ namespace pavicgui2024 {
 			this->bt_close_output = (gcnew System::Windows::Forms::Button());
 			this->bt_filter_Sepia = (gcnew System::Windows::Forms::Button());
 			this->bt_filter_Sepia_MultiThread = (gcnew System::Windows::Forms::Button());
+			this->bt_filter_Sepia_top = (gcnew System::Windows::Forms::Button());
+			this->bt_filter_Sepia_botton = (gcnew System::Windows::Forms::Button());
+			this->lb_timer = (gcnew System::Windows::Forms::Label());
+			this->textB_Time = (gcnew System::Windows::Forms::TextBox());
+			this->button1 = (gcnew System::Windows::Forms::Button());
+			this->bt_filter_Sepia_left = (gcnew System::Windows::Forms::Button());
+			this->bt_filter_Sepia_Thread = (gcnew System::Windows::Forms::Button());
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pbox_input))->BeginInit();
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pbox_copy))->BeginInit();
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pbox_output))->BeginInit();
@@ -247,11 +384,89 @@ namespace pavicgui2024 {
 			this->bt_filter_Sepia_MultiThread->UseVisualStyleBackColor = true;
 			this->bt_filter_Sepia_MultiThread->Click += gcnew System::EventHandler(this, &Pavic_gui_2024_Form::bt_filter_Sepia_MultiThread_Click);
 			// 
+			// bt_filter_Sepia_top
+			// 
+			this->bt_filter_Sepia_top->Location = System::Drawing::Point(362, 11);
+			this->bt_filter_Sepia_top->Margin = System::Windows::Forms::Padding(2);
+			this->bt_filter_Sepia_top->Name = L"bt_filter_Sepia_top";
+			this->bt_filter_Sepia_top->Size = System::Drawing::Size(142, 37);
+			this->bt_filter_Sepia_top->TabIndex = 14;
+			this->bt_filter_Sepia_top->Text = L"Filter Sepia- Top";
+			this->bt_filter_Sepia_top->UseVisualStyleBackColor = true;
+			this->bt_filter_Sepia_top->Click += gcnew System::EventHandler(this, &Pavic_gui_2024_Form::bt_filter_Sepia_left_Click);
+			// 
+			// bt_filter_Sepia_botton
+			// 
+			this->bt_filter_Sepia_botton->Location = System::Drawing::Point(508, 11);
+			this->bt_filter_Sepia_botton->Margin = System::Windows::Forms::Padding(2);
+			this->bt_filter_Sepia_botton->Name = L"bt_filter_Sepia_botton";
+			this->bt_filter_Sepia_botton->Size = System::Drawing::Size(142, 37);
+			this->bt_filter_Sepia_botton->TabIndex = 15;
+			this->bt_filter_Sepia_botton->Text = L"Filter Sepia - Botton";
+			this->bt_filter_Sepia_botton->UseVisualStyleBackColor = true;
+			this->bt_filter_Sepia_botton->Click += gcnew System::EventHandler(this, &Pavic_gui_2024_Form::button2_Click);
+			// 
+			// lb_timer
+			// 
+			this->lb_timer->AutoSize = true;
+			this->lb_timer->Location = System::Drawing::Point(739, 75);
+			this->lb_timer->Name = L"lb_timer";
+			this->lb_timer->Size = System::Drawing::Size(33, 13);
+			this->lb_timer->TabIndex = 16;
+			this->lb_timer->Text = L"Timer";
+			// 
+			// textB_Time
+			// 
+			this->textB_Time->Location = System::Drawing::Point(742, 91);
+			this->textB_Time->Name = L"textB_Time";
+			this->textB_Time->Size = System::Drawing::Size(161, 20);
+			this->textB_Time->TabIndex = 17;
+			// 
+			// button1
+			// 
+			this->button1->Location = System::Drawing::Point(508, 53);
+			this->button1->Margin = System::Windows::Forms::Padding(2);
+			this->button1->Name = L"button1";
+			this->button1->Size = System::Drawing::Size(142, 37);
+			this->button1->TabIndex = 19;
+			this->button1->Text = L"Filter Sepia - Right";
+			this->button1->UseVisualStyleBackColor = true;
+			this->button1->Click += gcnew System::EventHandler(this, &Pavic_gui_2024_Form::button1_Click_1);
+			// 
+			// bt_filter_Sepia_left
+			// 
+			this->bt_filter_Sepia_left->Location = System::Drawing::Point(362, 53);
+			this->bt_filter_Sepia_left->Margin = System::Windows::Forms::Padding(2);
+			this->bt_filter_Sepia_left->Name = L"bt_filter_Sepia_left";
+			this->bt_filter_Sepia_left->Size = System::Drawing::Size(142, 37);
+			this->bt_filter_Sepia_left->TabIndex = 18;
+			this->bt_filter_Sepia_left->Text = L"Filter Sepia- Left";
+			this->bt_filter_Sepia_left->UseVisualStyleBackColor = true;
+			this->bt_filter_Sepia_left->Click += gcnew System::EventHandler(this, &Pavic_gui_2024_Form::bt_filter_Sepia_left_Click_1);
+			// 
+			// bt_filter_Sepia_Thread
+			// 
+			this->bt_filter_Sepia_Thread->Location = System::Drawing::Point(362, 94);
+			this->bt_filter_Sepia_Thread->Margin = System::Windows::Forms::Padding(2);
+			this->bt_filter_Sepia_Thread->Name = L"bt_filter_Sepia_Thread";
+			this->bt_filter_Sepia_Thread->Size = System::Drawing::Size(142, 37);
+			this->bt_filter_Sepia_Thread->TabIndex = 20;
+			this->bt_filter_Sepia_Thread->Text = L"Filter Sepia- Thread";
+			this->bt_filter_Sepia_Thread->UseVisualStyleBackColor = true;
+			this->bt_filter_Sepia_Thread->Click += gcnew System::EventHandler(this, &Pavic_gui_2024_Form::bt_filter_Sepia_Thread_Click);
+			// 
 			// Pavic_gui_2024_Form
 			// 
 			this->AutoScaleDimensions = System::Drawing::SizeF(6, 13);
 			this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
 			this->ClientSize = System::Drawing::Size(1251, 617);
+			this->Controls->Add(this->bt_filter_Sepia_Thread);
+			this->Controls->Add(this->button1);
+			this->Controls->Add(this->bt_filter_Sepia_left);
+			this->Controls->Add(this->textB_Time);
+			this->Controls->Add(this->lb_timer);
+			this->Controls->Add(this->bt_filter_Sepia_botton);
+			this->Controls->Add(this->bt_filter_Sepia_top);
 			this->Controls->Add(this->bt_filter_Sepia_MultiThread);
 			this->Controls->Add(this->bt_filter_Sepia);
 			this->Controls->Add(this->bt_close_output);
@@ -296,7 +511,8 @@ private: System::Void bt_copy_Click(System::Object^ sender, System::EventArgs^ e
 	pbox_copy->Image = pbox_input->Image;
 
 	//copyStopwatch->Stop();
-	//label11->Text = "Tempo de cópia: " + copyStopwatch->ElapsedMilliseconds.ToString() + " ms";
+	lb_timer->Text = "Tempo de cópia: ";//+copyStopwatch->ElapsedMilliseconds.ToString() + " ms";
+	//textB_Time
 
 }
 private: System::Void bt_filter_bw_Click(System::Object^ sender, System::EventArgs^ e) {
@@ -385,33 +601,230 @@ private: System::Void bt_filter_Sepia_MultiThread_Click(System::Object^ sender, 
 
 	// Create a new output image with the same dimensions
 	Bitmap^ outputImage = gcnew Bitmap(inputImage->Width, inputImage->Height);
+	//// Bloquear os bits das imagens para acesso direto aos dados brutos
+	//Imaging::BitmapData^ bmpDataInput = inputImage->LockBits(
+	//	Drawing::Rectangle(0, 0, inputImage->Width, inputImage->Height),
+	//	Imaging::ImageLockMode::ReadOnly,
+	//	inputImage->PixelFormat); // Use o PixelFormat original
 
-	// 2 threads
-	// Imagen = data
-	int midY = inputImage->Height / 2;
-	X=0, Y=0 
-	--------------------- T1
-	--------------------- 
-	--------------------- Y/2 T2
-	---------------------
-	--------------------- X= Width, Y = Height
+	//Imaging::BitmapData^ bmpDataOutput = outputImage->LockBits(
+	//	Drawing::Rectangle(0, 0, outputImage->Width, outputImage->Height),
+	//	Imaging::ImageLockMode::WriteOnly,
+	//	outputImage->PixelFormat); // Use o PixelFormat original
+
+	//// Calcular o ponto médio para dividir a imagem
+	//int midY = inputImage->Height / 2;
+
+	//// Calcular bytes por pixel
+	//int bytesPerPixel = Bitmap::GetPixelFormatSize(inputImage->PixelFormat) / 8;
+
+	//
+	//// Criar as threads, passando os ponteiros para os dados brutos e outros parâmetros
+	//std::thread t1(&ApplySepiaFilterPartialRaw, bmpDataInput->Scan0, bmpDataInput->Stride, bmpDataOutput->Scan0, bmpDataOutput->Stride, inputImage->Width, bytesPerPixel, 0, midY);
+	//std::thread t2(&ApplySepiaFilterPartialRaw, bmpDataInput->Scan0, bmpDataInput->Stride, bmpDataOutput->Scan0, bmpDataOutput->Stride, inputImage->Width, bytesPerPixel, midY, inputImage->Height);
 
 
-	// Criar as threads
 
-	std::thread t1( func, var);
-	std::thread t2(func, var);
+	//// void ApplySepiaFilterPartialRaw(IntPtr inputScan0, int inputStride, IntPtr outputScan0, int outputStride, int width, int bytesPerPixel, int startY, int endY) {
+	//// Esperar que ambas as threads concluam sua execução
+	//t1.join();
+	//t2.join();
 
-	// Thread Main
-
-	t1.join();
-	t2.join();
-
+	//// Desbloquear os bits das imagens APÓS as threads terminarem
+	//inputImage->UnlockBits(bmpDataInput);
+	//outputImage->UnlockBits(bmpDataOutput);
 
 
 	// Display the output image
+	//pbox_output->Image = outputImage;
+
+}
+private: System::Void button2_Click(System::Object^ sender, System::EventArgs^ e) {
+	// Get the input image
+	Bitmap^ inputImage = (Bitmap^)pbox_input->Image;
+
+	// Create a new output image with the same dimensions
+	Bitmap^ outputImage = gcnew Bitmap(inputImage->Width, inputImage->Height);
+
+	// Apply the black and white filter
+	// inputImage->Width -->> X
+	// inputImage->Height -->> Y
+
+
+
+	//Image Botton !!
+	int startY_Botton = inputImage->Height / 2;
+	int endY_Botton = inputImage->Height;
+
+
+	// Filtro  Botton
+	ApplySepiaFilterPartial(inputImage, outputImage, startY_Botton, endY_Botton);
+
+
+	// Display the output image
+	//pbox_copy->Image = outputImage;
 	pbox_output->Image = outputImage;
 
+}
+private: System::Void bt_filter_Sepia_left_Click(System::Object^ sender, System::EventArgs^ e) {
+
+	// Get the input image
+	Bitmap^ inputImage = (Bitmap^)pbox_input->Image;
+
+	// Create a new output image with the same dimensions
+	Bitmap^ outputImage = gcnew Bitmap(inputImage->Width, inputImage->Height);
+
+	// Apply the black and white filter
+	// inputImage->Width -->> X
+	// inputImage->Height -->> Y
+	
+	//Image Top !!
+	int startY_Top = 0;
+	int endY_Top = inputImage->Height/2;
+
+	//Image Botton !!
+	int startY_Botton = inputImage->Height / 2;
+	int endY_Botton = inputImage->Height;
+	
+	// Filtro  Top
+	ApplySepiaFilterPartial(inputImage, outputImage, startY_Top, endY_Top);
+
+	// Filtro  Botton
+	//ApplySepiaFilterPartial(inputImage, outputImage, startY_Botton, endY_Botton);
+
+	// Display the output image
+	pbox_copy->Image = outputImage;
+	//pbox_output->Image = outputImage;
+}
+private: System::Void bt_filter_Sepia_left_Click_1(System::Object^ sender, System::EventArgs^ e) {
+
+	// Get the input image
+	Bitmap^ inputImage = (Bitmap^)pbox_input->Image;
+
+	// Create a new output image with the same dimensions
+	Bitmap^ outputImage = gcnew Bitmap(inputImage->Width, inputImage->Height);
+
+	// Apply the black and white filter
+	// inputImage->Width -->> X
+	// inputImage->Height -->> Y
+
+	//Image Top !!
+	int startY_Top = 0;
+	int endY_Top = inputImage->Height / 2;
+
+	//Image Botton !!
+	int startY_Botton = inputImage->Height / 2;
+	int endY_Botton = inputImage->Height;
+
+	// Image Left
+	int startX_left = 0;
+	int endX_left = inputImage->Width/2;
+
+	// Image Right
+	int startX_Right = inputImage->Width / 2;
+	int endX_Right = inputImage->Width ;
+
+	// Filtro  Top-Left
+	ApplySepiaFilterWindow(inputImage, outputImage, startX_left, endX_left, startY_Top, endY_Top);
+
+	// Filtro  Botton
+	//ApplySepiaFilterPartial(inputImage, outputImage, startY_Botton, endY_Botton);
+
+	// Display the output image
+	pbox_copy->Image = outputImage;
+	//pbox_output->Image = outputImage;
+
+}
+private: System::Void button1_Click_1(System::Object^ sender, System::EventArgs^ e) {
+	// Get the input image
+	Bitmap^ inputImage = (Bitmap^)pbox_input->Image;
+
+	// Create a new output image with the same dimensions
+	Bitmap^ outputImage = gcnew Bitmap(inputImage->Width, inputImage->Height);
+
+	// Apply the black and white filter
+	// inputImage->Width -->> X
+	// inputImage->Height -->> Y
+
+	//Image Top !!
+	int startY_Top = 0;
+	int endY_Top = inputImage->Height / 2;
+
+	//Image Botton !!
+	int startY_Botton = inputImage->Height / 2;
+	int endY_Botton = inputImage->Height;
+
+	// Image Left
+	int startX_left = 0;
+	int endX_left = inputImage->Width / 2;
+
+	// Image Right
+	int startX_Right = inputImage->Width / 2;
+	int endX_Right = inputImage->Width;
+
+	// Filtro  Botton - Right
+	ApplySepiaFilterWindow(inputImage, outputImage, startX_Right, endX_Right, startY_Botton, endY_Botton);
+
+	// Filtro  Botton
+	//ApplySepiaFilterPartial(inputImage, outputImage, startY_Botton, endY_Botton);
+
+	// Display the output image
+	//pbox_copy->Image = outputImage;
+	pbox_output->Image = outputImage;
+
+}
+private: System::Void bt_filter_Sepia_Thread_Click(System::Object^ sender, System::EventArgs^ e) {
+
+	// Get the input image
+	Bitmap^ inputImage = (Bitmap^)pbox_input->Image;
+
+	// Create a new output image with the same dimensions
+	Bitmap^ outputImage = gcnew Bitmap(inputImage->Width, inputImage->Height);
+
+	// Apply the black and white filter
+	// inputImage->Width -->> X
+	// inputImage->Height -->> Y
+
+	//Image Top !!
+	int startY_Top = 0;
+	int endY_Top = inputImage->Height / 2;
+
+	//Image Botton !!
+	int startY_Botton = inputImage->Height / 2;
+	int endY_Botton = inputImage->Height;
+
+	// Image Left
+	int startX_left = 0;
+	int endX_left = inputImage->Width / 2;
+
+	// Image Right
+	int startX_Right = inputImage->Width / 2;
+	int endX_Right = inputImage->Width;
+
+
+	//  Filter with threads 
+
+	//// Criar as threads, passando os ponteiros para os dados brutos e outros parâmetros
+	//std::thread t1(&ApplySepiaFilterPartialRaw, bmpDataInput->Scan0, bmpDataInput->Stride, bmpDataOutput->Scan0, bmpDataOutput->Stride, inputImage->Width, bytesPerPixel, 0, midY);
+	
+	//std::thread t1(ApplySepiaFilterWindow,inputImage, outputImage, startX_Right, endX_Right, startY_Botton, endY_Botton);
+	
+	//ApplySepiaFilterWindow(inputImage, outputImage, startX_Right, endX_Right, startY_Botton, endY_Botton);
+
+
+	// void ApplySepiaFilterPartialRaw(IntPtr inputScan0, int inputStride, IntPtr outputScan0, int outputStride, int width, int bytesPerPixel, int startY, int endY) {
+	// Esperar que ambas as threads concluam sua execução
+	//t1.join();
+
+	// Filtro  Botton - Right
+	ApplySepiaFilterWindow(inputImage, outputImage, startX_Right, endX_Right, startY_Botton, endY_Botton);
+
+	// Filtro  Botton
+	//ApplySepiaFilterPartial(inputImage, outputImage, startY_Botton, endY_Botton);
+
+	// Display the output image
+	//pbox_copy->Image = outputImage;
+	pbox_output->Image = outputImage;
 }
 };
 }
