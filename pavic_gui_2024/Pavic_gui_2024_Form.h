@@ -3,6 +3,8 @@
 
 #include <thread> // Inclua esta linha para usar std::thread
 #include <algorithm> // Inclua esta linha para usar std::min
+#include <msclr/gcroot.h> // Include this at the top of your .cpp file
+#include <chrono> // Timer
 
 namespace pavicgui2024 {
 //#include "include/Diagnostic.h"
@@ -18,6 +20,7 @@ namespace pavicgui2024 {
 	using namespace System::Data;
 	using namespace System::Drawing;
 	using namespace System::Drawing::Imaging; // <-- Adicione esta linha para BitmapData, ImageLockMode, PixelFormat
+	using namespace std::chrono; // Timer
 
 	using namespace std; // Assuming Diagnostics is in the std namespace
 
@@ -83,7 +86,58 @@ namespace pavicgui2024 {
 		}
 	}
 	// --- Fim da função auxiliar ---
+	// ===============================================================================
+	// Helper struct to pass arguments to the unmanaged thread function
+	struct SepiaThreadArgs {
+		msclr::gcroot<Bitmap^> inputImage;
+		msclr::gcroot<Bitmap^> outputImage;
+		int startX;
+		int endX;
+		int startY;
+		int endY;
+	};
+
+	// This function MUST be an unmanaged (native) C++ function
+	// It cannot directly take Bitmap^ as parameters.
+	void ApplySepiaFilterWindow_Unmanaged(SepiaThreadArgs* args) {
+		Bitmap^ inputImage = args->inputImage;   // Get managed handle from gcroot
+		Bitmap^ outputImage = args->outputImage; // Get managed handle from gcroot
+
+		// Ensure the managed objects are still valid before using
+		if (inputImage == nullptr || outputImage == nullptr) {
+			// Handle error or return
+			return;
+		}
+
+		// You would typically use LockBits here for performance with raw pixel data
+		// because GetPixel/SetPixel are very slow and involve interop calls per pixel.
+		// For simplicity, keeping your original GetPixel/SetPixel logic:
+		for (int i = args->startX; i < args->endX; i++) {
+			for (int j = args->startY; j < args->endY; j++) {
+				Color pixelColor = inputImage->GetPixel(i, j);
+
+				int r = pixelColor.R;
+				int g = pixelColor.G;
+				int b = pixelColor.B;
+
+				double tr = 0.393 * r + 0.769 * g + 0.189 * b;
+				double tg = 0.349 * r + 0.686 * g + 0.168 * b;
+				double tb = 0.272 * r + 0.534 * g + 0.131 * b;
+
+				int newR = System::Math::Min(255, (int)tr); // Use System::Math for managed functions
+				int newG = System::Math::Min(255, (int)tg);
+				int newB = System::Math::Min(255, (int)tb);
+
+				outputImage->SetPixel(i, j, Color::FromArgb(newR, newG, newB));
+			}
+		}
+
+		// Don't delete args here if it was created on the stack of the calling function.
+		// If it was dynamically allocated (e.g., `new SepiaThreadArgs()`), then you'd delete it here.
+	}
+
 	// 
+	// ===============================================================================
 	// 
 	//================================================================================
 	//================================================================================
@@ -802,29 +856,37 @@ private: System::Void bt_filter_Sepia_Thread_Click(System::Object^ sender, Syste
 	int startX_Right = inputImage->Width / 2;
 	int endX_Right = inputImage->Width;
 
+	// Start Timer
+	auto start = high_resolution_clock::now(); // Start Timer
 
 	//  Filter with threads 
 
-	//// Criar as threads, passando os ponteiros para os dados brutos e outros parâmetros
-	//std::thread t1(&ApplySepiaFilterPartialRaw, bmpDataInput->Scan0, bmpDataInput->Stride, bmpDataOutput->Scan0, bmpDataOutput->Stride, inputImage->Width, bytesPerPixel, 0, midY);
+	SepiaThreadArgs* threadArgs = new SepiaThreadArgs(); // Dynamically allocate
+	threadArgs->inputImage = inputImage;
+	threadArgs->outputImage = outputImage;
+	threadArgs->startX = startX_left;
+	threadArgs->endX = endX_Right;
+	threadArgs->startY = startY_Top;
+	threadArgs->endY = endY_Botton;
+
+	std::thread t1(ApplySepiaFilterWindow_Unmanaged, threadArgs);
+	// Stop Timer
 	
-	//std::thread t1(ApplySepiaFilterWindow,inputImage, outputImage, startX_Right, endX_Right, startY_Botton, endY_Botton);
+
+	t1.join();
+	auto end = high_resolution_clock::now(); // End Timer
+
+	// Calculate duration  
+	auto duration = duration_cast<milliseconds>(end - start);
+	//::cout << "Read and Write Images Pixel Time: " << duration.count() << " ms" << std::endl;
+
+	//copyStopwatch->Stop();
+	lb_timer->Text = "Calculate Processing duration: "+ duration.count().ToString() + " ms";
+	textB_Time->Text = "Impact labd 2025";
+
+	delete threadArgs; // Remember to free the allocated memory
 	
-	//ApplySepiaFilterWindow(inputImage, outputImage, startX_Right, endX_Right, startY_Botton, endY_Botton);
 
-
-	// void ApplySepiaFilterPartialRaw(IntPtr inputScan0, int inputStride, IntPtr outputScan0, int outputStride, int width, int bytesPerPixel, int startY, int endY) {
-	// Esperar que ambas as threads concluam sua execução
-	//t1.join();
-
-	// Filtro  Botton - Right
-	ApplySepiaFilterWindow(inputImage, outputImage, startX_Right, endX_Right, startY_Botton, endY_Botton);
-
-	// Filtro  Botton
-	//ApplySepiaFilterPartial(inputImage, outputImage, startY_Botton, endY_Botton);
-
-	// Display the output image
-	//pbox_copy->Image = outputImage;
 	pbox_output->Image = outputImage;
 }
 };
