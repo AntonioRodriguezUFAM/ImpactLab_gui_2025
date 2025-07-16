@@ -512,7 +512,7 @@ private: System::Void bt_copy_Click(System::Object^ sender, System::EventArgs^ e
 
 	//copyStopwatch->Stop();
 	lb_timer->Text = "Tempo de cópia: ";//+copyStopwatch->ElapsedMilliseconds.ToString() + " ms";
-	//textB_Time
+	textB_Time->Text = "Impact labd 2025";
 
 }
 private: System::Void bt_filter_bw_Click(System::Object^ sender, System::EventArgs^ e) {
@@ -685,9 +685,10 @@ private: System::Void bt_filter_Sepia_left_Click(System::Object^ sender, System:
 	//Image Botton !!
 	int startY_Botton = inputImage->Height / 2;
 	int endY_Botton = inputImage->Height;
-	
+	// Timer Start
 	// Filtro  Top
 	ApplySepiaFilterPartial(inputImage, outputImage, startY_Top, endY_Top);
+	//Timer End
 
 	// Filtro  Botton
 	//ApplySepiaFilterPartial(inputImage, outputImage, startY_Botton, endY_Botton);
