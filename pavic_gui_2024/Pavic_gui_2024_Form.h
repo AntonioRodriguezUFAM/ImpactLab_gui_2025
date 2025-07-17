@@ -136,6 +136,37 @@ namespace pavicgui2024 {
 		// If it was dynamically allocated (e.g., `new SepiaThreadArgs()`), then you'd delete it here.
 	}
 
+	// This function MUST be an unmanaged (native) C++ function
+	// It cannot directly take Bitmap^ as parameters.
+	void ApplyBWFilterWindow_Unmanaged(SepiaThreadArgs* args) {
+		Bitmap^ inputImage = args->inputImage;   // Get managed handle from gcroot
+		Bitmap^ outputImage = args->outputImage; // Get managed handle from gcroot
+
+		// Ensure the managed objects are still valid before using
+		if (inputImage == nullptr || outputImage == nullptr) {
+			// Handle error or return
+			return;
+		}
+
+		//// Apply the black and white filter
+		// You would typically use LockBits here for performance with raw pixel data
+		// because GetPixel/SetPixel are very slow and involve interop calls per pixel.
+		// For simplicity, keeping your original GetPixel/SetPixel logic:
+		for (int i = args->startX; i < args->endX; i++) {
+			for (int j = args->startY; j < args->endY; j++) {
+				
+				Color pixelColor = inputImage->GetPixel(i, j);
+				int grayValue = (int)(0.299 * pixelColor.R + 0.587 * pixelColor.G + 0.114 * pixelColor.B);
+				outputImage->SetPixel(i, j, Color::FromArgb(grayValue, grayValue, grayValue));
+				
+			}
+		}
+		
+
+		// Don't delete args here if it was created on the stack of the calling function.
+		// If it was dynamically allocated (e.g., `new SepiaThreadArgs()`), then you'd delete it here.
+	}
+
 	// 
 	// ===============================================================================
 	// 
@@ -650,47 +681,77 @@ private: System::Void bt_filter_Sepia_Click(System::Object^ sender, System::Even
 private: System::Void button1_Click(System::Object^ sender, System::EventArgs^ e) {
 }
 private: System::Void bt_filter_Sepia_MultiThread_Click(System::Object^ sender, System::EventArgs^ e) {
+
 	// Get the input image
 	Bitmap^ inputImage = (Bitmap^)pbox_input->Image;
 
 	// Create a new output image with the same dimensions
 	Bitmap^ outputImage = gcnew Bitmap(inputImage->Width, inputImage->Height);
-	//// Bloquear os bits das imagens para acesso direto aos dados brutos
-	//Imaging::BitmapData^ bmpDataInput = inputImage->LockBits(
-	//	Drawing::Rectangle(0, 0, inputImage->Width, inputImage->Height),
-	//	Imaging::ImageLockMode::ReadOnly,
-	//	inputImage->PixelFormat); // Use o PixelFormat original
 
-	//Imaging::BitmapData^ bmpDataOutput = outputImage->LockBits(
-	//	Drawing::Rectangle(0, 0, outputImage->Width, outputImage->Height),
-	//	Imaging::ImageLockMode::WriteOnly,
-	//	outputImage->PixelFormat); // Use o PixelFormat original
+	// Apply the black and white filter
+	// inputImage->Width -->> X
+	// inputImage->Height -->> Y
 
-	//// Calcular o ponto médio para dividir a imagem
-	//int midY = inputImage->Height / 2;
+	//Image Top !!
+	int startY_Top = 0;
+	int endY_Top = inputImage->Height / 2;
 
-	//// Calcular bytes por pixel
-	//int bytesPerPixel = Bitmap::GetPixelFormatSize(inputImage->PixelFormat) / 8;
+	//Image Botton !!
+	int startY_Botton = inputImage->Height / 2;
+	int endY_Botton = inputImage->Height;
 
-	//
-	//// Criar as threads, passando os ponteiros para os dados brutos e outros parâmetros
-	//std::thread t1(&ApplySepiaFilterPartialRaw, bmpDataInput->Scan0, bmpDataInput->Stride, bmpDataOutput->Scan0, bmpDataOutput->Stride, inputImage->Width, bytesPerPixel, 0, midY);
-	//std::thread t2(&ApplySepiaFilterPartialRaw, bmpDataInput->Scan0, bmpDataInput->Stride, bmpDataOutput->Scan0, bmpDataOutput->Stride, inputImage->Width, bytesPerPixel, midY, inputImage->Height);
+	// Image Left
+	int startX_left = 0;
+	int endX_left = inputImage->Width / 2;
+
+	// Image Right
+	int startX_Right = inputImage->Width / 2;
+	int endX_Right = inputImage->Width;
+
+	// Start Timer
+	auto start = high_resolution_clock::now(); // Start Timer
+
+	//  Filter with threads 
+
+	// Image 1/4
+	SepiaThreadArgs* threadArgs = new SepiaThreadArgs(); // Dynamically allocate
+	threadArgs->inputImage = inputImage;
+	threadArgs->outputImage = outputImage;
+	threadArgs->startX = startX_left;
+	threadArgs->endX = endX_left;
+	threadArgs->startY = startY_Top;
+	threadArgs->endY = endY_Top;
+
+	 // Image 4/4 
+	SepiaThreadArgs* threadArgs_1 = new SepiaThreadArgs(); // Dynamically allocate
+	threadArgs_1->inputImage = inputImage;
+	threadArgs_1->outputImage = outputImage;
+	threadArgs_1->startX = startX_Right;
+	threadArgs_1->endX = endX_Right;
+	threadArgs_1->startY = startY_Botton;
+	threadArgs_1->endY = endY_Botton;
+
+	std::thread t1(ApplySepiaFilterWindow_Unmanaged, threadArgs);
+	std::thread t2(ApplyBWFilterWindow_Unmanaged, threadArgs_1);
+
+	t1.join();
+	t2.join();
+	// Stop Timer
+	auto end = high_resolution_clock::now(); // End Timer
+
+	// Calculate duration  
+	auto duration = duration_cast<milliseconds>(end - start);
+	//::cout << "Read and Write Images Pixel Time: " << duration.count() << " ms" << std::endl;
+
+	//copyStopwatch->Stop();
+	lb_timer->Text = "Calculate Processing duration: " + duration.count().ToString() + " ms";
+	textB_Time->Text = "Impact labd 2025";
+
+	delete threadArgs,threadArgs_1; // Remember to free the allocated memory
 
 
-
-	//// void ApplySepiaFilterPartialRaw(IntPtr inputScan0, int inputStride, IntPtr outputScan0, int outputStride, int width, int bytesPerPixel, int startY, int endY) {
-	//// Esperar que ambas as threads concluam sua execução
-	//t1.join();
-	//t2.join();
-
-	//// Desbloquear os bits das imagens APÓS as threads terminarem
-	//inputImage->UnlockBits(bmpDataInput);
-	//outputImage->UnlockBits(bmpDataOutput);
-
-
-	// Display the output image
 	//pbox_output->Image = outputImage;
+	pbox_copy->Image = outputImage;
 
 }
 private: System::Void button2_Click(System::Object^ sender, System::EventArgs^ e) {
@@ -870,10 +931,9 @@ private: System::Void bt_filter_Sepia_Thread_Click(System::Object^ sender, Syste
 	threadArgs->endY = endY_Botton;
 
 	std::thread t1(ApplySepiaFilterWindow_Unmanaged, threadArgs);
-	// Stop Timer
 	
-
 	t1.join();
+	// Stop Timer
 	auto end = high_resolution_clock::now(); // End Timer
 
 	// Calculate duration  
